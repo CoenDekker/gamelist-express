@@ -158,6 +158,36 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
   }
 });
 
+router.delete("/gamelist/game/:id", async (req, res) => {
+  if (!process.env.GAMELIST_WRITE_KEY || req.get("x-api-key") !== process.env.GAMELIST_WRITE_KEY) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist write access is not configured." });
+  }
+
+  try {
+    const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const existing = await client.pages.retrieve({ page_id: req.params.id });
+    if (existing.parent?.database_id?.replace(/-/g, "") !== "1f41efa65d6e47eebe88b6313a2f9889" || existing.archived) {
+      return res.status(404).json({ error: "Game not found." });
+    }
+
+    const deleted = await client.pages.update({
+      page_id: req.params.id,
+      in_trash: true,
+    });
+    cache = { date: null, data: null };
+    res.json({ id: deleted.id, deleted: true });
+  } catch (error) {
+    if (error.code === "object_not_found") {
+      return res.status(404).json({ error: "Game not found." });
+    }
+    console.error("Failed to delete game", error);
+    res.status(500).json({ error: "Unable to delete game." });
+  }
+});
+
 router.get("/gamelist/:id", (req, res) => {
   if (!process.env.NOTION_GAMELIST_TOKEN) {
     return res.status(503).json({ error: "Gamelist access is not configured." });
