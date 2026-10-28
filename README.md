@@ -43,11 +43,11 @@ npm run deploy
 Add these three variables to the site's environment variables in Netlify for
 the deployed Functions (including the production environment):
 
-| Variable | Value | Used by |
-| --- | --- | --- |
-| `NOTION_GAMELIST_TOKEN` | Notion integration secret with access to the gamelist database | Read and add games |
-| `NOTION_LL_TOKEN` | Notion integration secret with access to the LL database | Read, add, update, and delete LL builds |
-| `GAMELIST_WRITE_KEY` | A new random private key, for example generated with `openssl rand -hex 32` | Authorize adding games via `x-api-key` |
+| Variable                | Value                                                                       | Used by                                            |
+| ----------------------- | --------------------------------------------------------------------------- | -------------------------------------------------- |
+| `NOTION_GAMELIST_TOKEN` | Notion integration secret with access to the gamelist database              | Read, search, add, and edit games                  |
+| `NOTION_LL_TOKEN`       | Notion integration secret with access to the LL database                    | Read, add, update, and delete LL builds            |
+| `GAMELIST_WRITE_KEY`    | A new random private key, for example generated with `openssl rand -hex 32` | Authorize adding and editing games via `x-api-key` |
 
 Generate the integration secrets in Notion, then store them in Netlify. One
 Notion integration token may be used for both variables if that integration has
@@ -78,3 +78,27 @@ curl -X POST http://localhost:8888/api/gamelist \
 
 Successful requests return `201` and the created game. Missing or invalid fields
 return `400`; missing or incorrect API keys return `401`.
+
+# Find and edit a game
+
+`GET /api/gamelist/search?name=Rayman` returns matching games by title, including
+each game's `id`, `name`, `image`, `platform`, `status`, and `rating`. Use the
+`name` for a dropdown label and the `id` as its value, so games with identical
+names can still be selected separately. URL-encode the search term.
+
+Fetch a selected game with `GET /api/gamelist/game/:id`. The response uses
+`image` for the cover URL. To edit it, send `PATCH /api/gamelist/game/:id` with
+`x-api-key` and any combination of `name`, `coverUrl`, `platform`, `status`, and
+`rating` (a select value; send an empty string to clear it). Unspecified fields
+stay unchanged. For example:
+
+```sh
+curl -X PATCH "http://localhost:8888/api/gamelist/game/GAME_ID" \
+	-H "Content-Type: application/json" \
+	-H "x-api-key: $GAMELIST_WRITE_KEY" \
+	-d '{"status":"playing","rating":"8"}'
+```
+
+Keep the write key in server-side code, not in a public site's browser bundle.
+Updates return the edited game; unknown IDs return `404` and invalid edits
+return `400`.

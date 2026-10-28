@@ -19,6 +19,125 @@ api.use("/api/", router);
 
 router.get("/hello", (req, res) => res.send("Hello World!"));
 
+router.get("/gamelist/search", async (req, res) => {
+  const name = req.query.name;
+  if (typeof name !== "string" || !name.trim()) {
+    return res.status(400).json({ error: "name is required." });
+  }
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist access is not configured." });
+  }
+
+  try {
+    const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const matches = [];
+    let cursor;
+    do {
+      const result = await client.databases.query({
+        database_id: "1f41efa65d6e47eebe88b6313a2f9889",
+        filter: { property: "title", title: { contains: name.trim() } },
+        sorts: [{ property: "title", direction: "ascending" }],
+        page_size: 100,
+        start_cursor: cursor,
+      });
+      matches.push(...result.results.map(getGameObject));
+      cursor = result.next_cursor;
+    } while (cursor);
+    res.json(matches);
+  } catch (error) {
+    console.error("Failed to search Gamelist", error);
+    res.status(500).json({ error: "Unable to search Gamelist." });
+  }
+});
+
+router.get("/gamelist/game/:id", async (req, res) => {
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist access is not configured." });
+  }
+
+  try {
+    const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const page = await client.pages.retrieve({ page_id: req.params.id });
+    if (page.parent?.database_id?.replace(/-/g, "") !== "1f41efa65d6e47eebe88b6313a2f9889" || page.archived) {
+      return res.status(404).json({ error: "Game not found." });
+    }
+    res.json(getGameObject(page));
+  } catch (error) {
+    if (error.code === "object_not_found" || error.code === "validation_error") {
+      return res.status(404).json({ error: "Game not found." });
+    }
+    console.error("Failed to load game", error);
+    res.status(500).json({ error: "Unable to load game." });
+  }
+});
+
+router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
+  if (!process.env.GAMELIST_WRITE_KEY || req.get("x-api-key") !== process.env.GAMELIST_WRITE_KEY) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
+
+  const changes = req.body;
+  const fields = ["name", "coverUrl", "platform", "status", "rating"];
+  if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
+    !Object.keys(changes).length || Object.keys(changes).some((field) => !fields.includes(field))) {
+    return res.status(400).json({ error: `Provide one or more of: ${fields.join(", ")}.` });
+  }
+
+  const properties = {};
+  for (const [field, value] of Object.entries(changes)) {
+    if (typeof value !== "string" || (field !== "rating" && !value.trim())) {
+      return res.status(400).json({ error: `${field} must be a non-empty string.` });
+    }
+    if (field === "name") {
+      properties.title = { title: [{ text: { content: value.trim() } }] };
+    } else if (field === "coverUrl") {
+      let cover;
+      try {
+        cover = new URL(value);
+      } catch {
+        return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
+      }
+      if (!["http:", "https:"].includes(cover.protocol)) {
+        return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
+      }
+      properties.cover = { files: [{ name: cover.href, type: "external", external: { url: cover.href } }] };
+    } else if (field === "platform") {
+      properties.platform = { multi_select: [{ name: value.trim() }] };
+    } else if (field === "status") {
+      if (!statusOrder.includes(value)) {
+        return res.status(400).json({ error: `status must be one of: ${statusOrder.join(", ")}.` });
+      }
+      properties.status = { select: { name: value } };
+    } else if (field === "rating") {
+      properties.rating = { select: value.trim() ? { name: value.trim() } : null };
+    }
+  }
+
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist write access is not configured." });
+  }
+
+  try {
+    const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const existing = await client.pages.retrieve({ page_id: req.params.id });
+    if (existing.parent?.database_id?.replace(/-/g, "") !== "1f41efa65d6e47eebe88b6313a2f9889" || existing.archived) {
+      return res.status(404).json({ error: "Game not found." });
+    }
+    const page = await client.pages.update({ page_id: req.params.id, properties });
+    cache = { date: null, data: null };
+    res.json(getGameObject(page));
+  } catch (error) {
+    if (error.code === "object_not_found") {
+      return res.status(404).json({ error: "Game not found." });
+    }
+    if (error.code === "validation_error") {
+      return res.status(400).json({ error: "Invalid game update." });
+    }
+    console.error("Failed to update game", error);
+    res.status(500).json({ error: "Unable to update game." });
+  }
+});
+
 router.get("/gamelist/:id", (req, res) => {
   if (!process.env.NOTION_GAMELIST_TOKEN) {
     return res.status(503).json({ error: "Gamelist access is not configured." });
