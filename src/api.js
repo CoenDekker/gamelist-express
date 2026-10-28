@@ -84,6 +84,7 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
   }
 
   const properties = {};
+  let statusChange;
   for (const [field, value] of Object.entries(changes)) {
     if (typeof value !== "string" || (field !== "rating" && !value.trim())) {
       return res.status(400).json({ error: `${field} must be a non-empty string.` });
@@ -107,7 +108,7 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       if (!statusOrder.includes(value)) {
         return res.status(400).json({ error: `status must be one of: ${statusOrder.join(", ")}.` });
       }
-      properties.status = { select: { name: value } };
+      statusChange = value;
     } else if (field === "rating") {
       properties.rating = { select: value.trim() ? { name: value.trim() } : null };
     }
@@ -123,6 +124,9 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
     if (existing.parent?.database_id?.replace(/-/g, "") !== "1f41efa65d6e47eebe88b6313a2f9889" || existing.archived) {
       return res.status(404).json({ error: "Game not found." });
     }
+    if (statusChange) {
+      properties.status = makeStatusProperty(existing.properties?.status?.type, statusChange);
+    }
     const page = await client.pages.update({ page_id: req.params.id, properties });
     cache = { date: null, data: null };
     res.json(getGameObject(page));
@@ -131,7 +135,8 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       return res.status(404).json({ error: "Game not found." });
     }
     if (error.code === "validation_error") {
-      return res.status(400).json({ error: "Invalid game update." });
+      console.error("Notion rejected Gamelist update:", error.message);
+      return res.status(400).json({ error: "Invalid game update.", details: error.message });
     }
     console.error("Failed to update game", error);
     res.status(500).json({ error: "Unable to update game." });
@@ -216,22 +221,35 @@ router.post("/gamelist", express.json(), async (req, res) => {
 
   try {
     const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const database = await client.databases.retrieve({
+      database_id: "1f41efa65d6e47eebe88b6313a2f9889",
+    });
     const page = await client.pages.create({
       parent: { database_id: "1f41efa65d6e47eebe88b6313a2f9889" },
       properties: {
         title: { title: [{ text: { content: name.trim() } }] },
         cover: { files: [{ name: cover.href, type: "external", external: { url: cover.href } }] },
         platform: { multi_select: [{ name: platform.trim() }] },
-        status: { select: { name: status } },
+        status: makeStatusProperty(database.properties?.status?.type, status),
       },
     });
     cache = { date: null, data: null };
     res.status(201).json(getGameObject(page));
   } catch (error) {
     console.error("Failed to add game", error);
+    if (error.code === "validation_error") {
+      return res.status(400).json({ error: "Invalid game details.", details: error.message });
+    }
     res.status(500).json({ error: "Unable to add game." });
   }
 });
+
+function makeStatusProperty(type, name) {
+  if (type === "status") return { status: { name } };
+  if (type === "multi_select") return { multi_select: [{ name }] };
+  if (type === "select") return { select: { name } };
+  throw new Error(`Unsupported Notion status property type: ${type || "missing"}.`);
+}
 
 async function startNotionLooper(res, next_cursor = undefined, run = 1) {
   let result = await getNotionData(next_cursor);
