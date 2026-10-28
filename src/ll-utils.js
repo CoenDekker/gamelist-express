@@ -10,7 +10,7 @@ export function getLLBuild(build) {
     core: build.properties?.core.rich_text[0].plain_text || null,
     class: build.properties?.class.rich_text[0].plain_text || null,
     skill: build.properties?.skill.rich_text[0].plain_text || null,
-    ability: build.properties?.ability.rich_text[0].plain_text || null,
+    job: build.properties?.job.rich_text[0].plain_text || null,
     element: build.properties?.element.rich_text[0].plain_text || null,
     equipment: build.properties?.equipment.rich_text[0].plain_text || null,
     filter: build.properties?.filter.rich_text[0].plain_text || null,
@@ -84,12 +84,12 @@ export function getPropertiesObject(data) {
         },
       ],
     },
-    ability: {
+    job: {
       type: "rich_text",
       rich_text: [
         {
           type: "text",
-          text: { content: data.ability, link: null },
+          text: { content: data.job, link: null },
         },
       ],
     },

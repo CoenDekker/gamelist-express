@@ -167,7 +167,7 @@
         ]
       },
       "level": { "id": "zURT", "type": "number", "number": 6 },
-      "ability": {
+      "job": {
         "id": "zZam",
         "type": "rich_text",
         "rich_text": [
@@ -382,7 +382,7 @@
         ]
       },
       "level": { "id": "zURT", "type": "number", "number": 9 },
-      "ability": {
+      "job": {
         "id": "zZam",
         "type": "rich_text",
         "rich_text": [
