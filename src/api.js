@@ -12,6 +12,7 @@ let run;
 let bundle = [];
 let cache = { date: null, data: null };
 let notion;
+const statusOrder = ["playing", "replaying", "queued", "finished", "completed"];
 
 api.use(cors());
 
@@ -146,7 +147,8 @@ function removeDuplicatesAndSort(arr, prop) {
   });
 
   const groupedByStatus = arr.reduce((acc, obj) => {
-    const { status } = obj;
+    const status = statusOrder.find((value) => obj.status.includes(value));
+    if (!status) return acc;
     if (!acc[status]) {
       acc[status] = [];
     }
@@ -167,31 +169,23 @@ function removeDuplicatesAndSort(arr, prop) {
     }
   }
 
-  let result = [];
+  const result = [];
 
-  if (groupedByStatus.playing) {
-    result = [...result, ...groupedByStatus.playing];
-  }
-
-  if (groupedByStatus.replaying) {
-    result = [...result, ...groupedByStatus.replaying];
-  }
-
-  if (groupedByStatus.queued) {
-    result = [...result, ...groupedByStatus.queued];
-  }
-
-  if (groupedByStatus.finished) {
-    result = [...result, ...groupedByStatus.finished];
+  for (const status of statusOrder) {
+    if (groupedByStatus[status]) {
+      result.push(...groupedByStatus[status]);
+    }
   }
 
   return result;
 }
 
 function getGameObject(gamedata) {
+  const statusProperty = gamedata.properties?.status;
   return {
     id: gamedata.id,
-    status: gamedata.properties?.status?.select?.name || "",
+    status: statusProperty?.multi_select?.map((tag) => tag.name) ||
+      [statusProperty?.status?.name || statusProperty?.select?.name].filter(Boolean),
     rating: gamedata.properties?.rating?.select?.name || "",
     image: gamedata.properties?.cover?.files?.[0]?.name || "",
     name: gamedata.properties?.title?.title?.[0]?.plain_text || "",
