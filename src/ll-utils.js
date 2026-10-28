@@ -19,7 +19,6 @@ export function getLLBuild(build) {
     trinket: build.properties?.trinket.rich_text[0].plain_text || null,
     set: build.properties?.set.rich_text[0].plain_text || null,
     item: build.properties?.item.rich_text[0].plain_text || null,
-    grace: build.properties?.grace.rich_text[0].plain_text || null,
     buff: build.properties?.buff.rich_text[0].plain_text || null,
     note: build.properties?.note.rich_text[0].plain_text || null,
     setting: build.properties?.setting.rich_text[0].plain_text || null,
@@ -163,15 +162,6 @@ export function getPropertiesObject(data) {
         {
           type: "text",
           text: { content: data.item, link: null },
-        },
-      ],
-    },
-    grace: {
-      type: "rich_text",
-      rich_text: [
-        {
-          type: "text",
-          text: { content: data.grace, link: null },
         },
       ],
     },

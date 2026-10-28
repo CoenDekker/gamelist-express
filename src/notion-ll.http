@@ -20,7 +20,6 @@
 #     "trinket": "49,55",
 #     "set": "Cool%20set%20of%20items˟less%20cool%20but%20still%20cool%20set",
 #     "item": "a%20cool%20flask˟416%20worms%20in%20a%20can˟bag%20of%20magical%20coins˟Super%20duper%20rainbow%20cape%20with%20pockets˟Soem%20weird%20stone%20that%20changes%20it!!39s%20shape%20every%20day",
-#     "grace": "This%20stuff%20is%20still%20in%20the%20game,%20but%20will%20be%20removed",
 #     "buff": "movement^2^3,power^22^2,bonusshield^2^3",
 #     "note": "Cool%20not%20bro",
 #     "setting": "1,0,1,0,1"
@@ -57,7 +56,6 @@ Content-Type: application/json
 # &trinket=49,55
 # &set=Cool%20set%20of%20items˟less%20cool%20but%20still%20cool%20set
 # &item=a%20cool%20flask˟416%20worms%20in%20a%20can˟bag%20of%20magical%20coins˟Super%20duper%20rainbow%20cape%20with%20pockets˟Soem%20weird%20stone%20that%20changes%20it!!39s%20shape%20every%20day
-# &grace=This%20stuff%20is%20still%20in%20the%20game,%20but%20will%20be%20removed
 # &buff=movement^2^3,power^22^2,bonusshield^2^3
 # &note=Cool%20not%20bro
 # &setting=1,0,1,0,1

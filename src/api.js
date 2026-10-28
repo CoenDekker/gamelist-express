@@ -42,11 +42,18 @@ router.get("/gamelist/:id", (req, res) => {
 
 router.get("/gamelist", (req, res) => {
   (async () => {
-    notion = await new Client({
-      auth: "secret_bosJYRpBzDUNd9bfqiQ0yWJknYA66G5ebvUhqTiy9E2",
-    });
-    run = 1;
-    await startNotionLooper(res, undefined, run);
+    try {
+      notion = new Client({
+        auth: "secret_bosJYRpBzDUNd9bfqiQ0yWJknYA66G5ebvUhqTiy9E2",
+      });
+      run = 1;
+      await startNotionLooper(res, undefined, run);
+    } catch (error) {
+      console.error("Failed to load Gamelist data", error);
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Unable to load Gamelist data." });
+      }
+    }
   })();
 });
 
@@ -184,12 +191,12 @@ function removeDuplicatesAndSort(arr, prop) {
 function getGameObject(gamedata) {
   return {
     id: gamedata.id,
-    status: gamedata.properties?.status.select.name || "",
-    rating: gamedata.properties?.rating.select?.name || "",
-    image: gamedata.properties?.cover.files[0].name || "",
-    name: gamedata.properties?.title?.title[0].plain_text || "",
-    platform: gamedata.properties?.platform.multi_select[0].name || "",
-    completed: gamedata.properties?.completed.checkbox || false,
+    status: gamedata.properties?.status?.select?.name || "",
+    rating: gamedata.properties?.rating?.select?.name || "",
+    image: gamedata.properties?.cover?.files?.[0]?.name || "",
+    name: gamedata.properties?.title?.title?.[0]?.plain_text || "",
+    platform: gamedata.properties?.platform?.multi_select?.[0]?.name || "",
+    completed: gamedata.properties?.completed?.checkbox || false,
   };
 }
 
