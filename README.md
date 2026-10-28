@@ -67,14 +67,16 @@ Send a JSON request to `POST /api/gamelist` with `GAMELIST_WRITE_KEY` in the
 `x-api-key` header. Keep the key on the server; do not expose it in a browser.
 
 Required fields: `name`, `coverUrl` (an HTTP or HTTPS URL), `platform`, and
-`status` (`playing`, `queued`, `replaying`, `finished`, `unplayed`, `pause`, or
-`backlog`). The optional `completed` field is a boolean for the completion checkbox.
+`status`, a non-empty array of unique values from `playing`, `queued`,
+`replaying`, `finished`, `unplayed`, `pause`, and `backlog`. The optional
+`completed` field is a boolean. The Notion `status` property must be Multi-select
+to store multiple values.
 
 ```sh
 curl -X POST http://localhost:8888/api/gamelist \
 	-H "Content-Type: application/json" \
 	-H "x-api-key: $GAMELIST_WRITE_KEY" \
-	-d '{"name":"Example Game","coverUrl":"https://example.com/cover.jpg","platform":"PC","status":"queued"}'
+	-d '{"name":"Example Game","coverUrl":"https://example.com/cover.jpg","platform":"PC","status":["queued"],"completed":false}'
 ```
 
 Successful requests return `201` and the created game. Missing or invalid fields
@@ -89,15 +91,16 @@ names can still be selected separately. URL-encode the search term.
 
 Fetch a selected game with `GET /api/gamelist/game/:id`. The response uses
 `image` for the cover URL. To edit it, send `PATCH /api/gamelist/game/:id` with
-`x-api-key` and any combination of `name`, `coverUrl`, `platform`, `status`,
-`rating` (a select value; send an empty string to clear it), and `completed` (a
-boolean). Unspecified fields stay unchanged. For example:
+`x-api-key` and any combination of `name`, `coverUrl`, `platform`, `status` (a
+non-empty array of unique status values), `rating` (a select value; send an
+empty string to clear it), and `completed` (a boolean). Unspecified fields stay
+unchanged. For example:
 
 ```sh
 curl -X PATCH "http://localhost:8888/api/gamelist/game/GAME_ID" \
 	-H "Content-Type: application/json" \
 	-H "x-api-key: $GAMELIST_WRITE_KEY" \
-	-d '{"status":"playing","rating":"8"}'
+	-d '{"status":["playing","replaying"],"rating":"8","completed":false}'
 ```
 
 Keep the write key in server-side code, not in a public site's browser bundle.
