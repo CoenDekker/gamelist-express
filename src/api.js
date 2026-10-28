@@ -93,6 +93,15 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       properties.completed = { checkbox: value };
       continue;
     }
+    if (field === "status") {
+      const statuses = Array.isArray(value) ? value : [value];
+      if (!statuses.length || statuses.some((status) => typeof status !== "string" || !statusOrder.includes(status)) ||
+        new Set(statuses).size !== statuses.length) {
+        return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
+      }
+      statusChange = statuses;
+      continue;
+    }
     if (typeof value !== "string" || (field !== "rating" && !value.trim())) {
       return res.status(400).json({ error: `${field} must be a non-empty string.` });
     }
@@ -111,13 +120,6 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       properties.cover = { files: [{ name: "cover", type: "external", external: { url: cover.href } }] };
     } else if (field === "platform") {
       properties.platform = { multi_select: [{ name: value.trim() }] };
-    } else if (field === "status") {
-      const statuses = Array.isArray(value) ? value : [value];
-      if (!statuses.length || statuses.some((status) => typeof status !== "string" || !statusOrder.includes(status)) ||
-        new Set(statuses).size !== statuses.length) {
-        return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
-      }
-      statusChange = statuses;
     } else if (field === "rating") {
       properties.rating = { select: value.trim() ? { name: value.trim() } : null };
     }
