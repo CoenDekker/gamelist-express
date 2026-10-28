@@ -11,7 +11,7 @@ let run;
 let bundle = [];
 let cache = { date: null, data: null };
 let notion;
-const statusOrder = ["playing", "replaying", "queued", "finished", "completed"];
+const statusOrder = ["playing", "replaying", "queued", "finished", "unplayed", "pause", "backlog"];
 
 api.use(cors());
 
@@ -77,7 +77,7 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
   }
 
   const changes = req.body;
-  const fields = ["name", "coverUrl", "platform", "status", "rating"];
+  const fields = ["name", "coverUrl", "platform", "status", "rating", "completed"];
   if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
     !Object.keys(changes).length || Object.keys(changes).some((field) => !fields.includes(field))) {
     return res.status(400).json({ error: `Provide one or more of: ${fields.join(", ")}.` });
@@ -86,6 +86,13 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
   const properties = {};
   let statusChange;
   for (const [field, value] of Object.entries(changes)) {
+    if (field === "completed") {
+      if (typeof value !== "boolean") {
+        return res.status(400).json({ error: "completed must be a boolean." });
+      }
+      properties["100%"] = { checkbox: value };
+      continue;
+    }
     if (typeof value !== "string" || (field !== "rating" && !value.trim())) {
       return res.status(400).json({ error: `${field} must be a non-empty string.` });
     }
@@ -101,7 +108,7 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       if (!["http:", "https:"].includes(cover.protocol)) {
         return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
       }
-      properties.cover = { files: [{ name: cover.href, type: "external", external: { url: cover.href } }] };
+      properties.cover = { files: [{ name: "cover", type: "external", external: { url: cover.href } }] };
     } else if (field === "platform") {
       properties.platform = { multi_select: [{ name: value.trim() }] };
     } else if (field === "status") {
@@ -193,6 +200,10 @@ router.post("/gamelist", express.json(), async (req, res) => {
   }
 
   const { name, coverUrl, platform, status } = req.body || {};
+  const completed = req.body?.completed ?? false;
+  if (typeof completed !== "boolean") {
+    return res.status(400).json({ error: "completed must be a boolean." });
+  }
   const required = { name, coverUrl, platform, status };
   const missing = Object.entries(required)
     .filter(([, value]) => typeof value !== "string" || !value.trim())
@@ -228,9 +239,10 @@ router.post("/gamelist", express.json(), async (req, res) => {
       parent: { database_id: "1f41efa65d6e47eebe88b6313a2f9889" },
       properties: {
         title: { title: [{ text: { content: name.trim() } }] },
-        cover: { files: [{ name: cover.href, type: "external", external: { url: cover.href } }] },
+        cover: { files: [{ name: "cover", type: "external", external: { url: cover.href } }] },
         platform: { multi_select: [{ name: platform.trim() }] },
         status: makeStatusProperty(database.properties?.status?.type, status),
+        "100%": { checkbox: completed },
       },
     });
     cache = { date: null, data: null };
@@ -362,10 +374,13 @@ function getGameObject(gamedata) {
     status: statusProperty?.multi_select?.map((tag) => tag.name) ||
       [statusProperty?.status?.name || statusProperty?.select?.name].filter(Boolean),
     rating: gamedata.properties?.rating?.select?.name || "",
-    image: gamedata.properties?.cover?.files?.[0]?.name || "",
+    image: gamedata.properties?.cover?.files?.[0]?.external?.url ||
+      gamedata.properties?.cover?.files?.[0]?.file?.url ||
+      gamedata.properties?.cover?.files?.[0]?.name || "",
     name: gamedata.properties?.title?.title?.[0]?.plain_text || "",
     platform: gamedata.properties?.platform?.multi_select?.[0]?.name || "",
-    completed: gamedata.properties?.completed?.checkbox || false,
+    completed: gamedata.properties?.["100%"]?.checkbox ??
+      gamedata.properties?.completed?.checkbox ?? false,
   };
 }
 

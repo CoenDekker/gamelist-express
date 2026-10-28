@@ -67,7 +67,8 @@ Send a JSON request to `POST /api/gamelist` with `GAMELIST_WRITE_KEY` in the
 `x-api-key` header. Keep the key on the server; do not expose it in a browser.
 
 Required fields: `name`, `coverUrl` (an HTTP or HTTPS URL), `platform`, and
-`status` (`playing`, `replaying`, `queued`, `finished`, or `completed`).
+`status` (`playing`, `queued`, `replaying`, `finished`, `unplayed`, `pause`, or
+`backlog`). The optional `completed` field is a boolean for the 100% checkbox.
 
 ```sh
 curl -X POST http://localhost:8888/api/gamelist \
@@ -88,9 +89,9 @@ names can still be selected separately. URL-encode the search term.
 
 Fetch a selected game with `GET /api/gamelist/game/:id`. The response uses
 `image` for the cover URL. To edit it, send `PATCH /api/gamelist/game/:id` with
-`x-api-key` and any combination of `name`, `coverUrl`, `platform`, `status`, and
-`rating` (a select value; send an empty string to clear it). Unspecified fields
-stay unchanged. For example:
+`x-api-key` and any combination of `name`, `coverUrl`, `platform`, `status`,
+`rating` (a select value; send an empty string to clear it), and `completed` (a
+boolean for the 100% checkbox). Unspecified fields stay unchanged. For example:
 
 ```sh
 curl -X PATCH "http://localhost:8888/api/gamelist/game/GAME_ID" \
