@@ -1,7 +1,6 @@
 import express, { Router } from "express";
 import serverless from "serverless-http";
 import cors from "cors";
-import axios from "axios";
 import { Client } from "@notionhq/client";
 import { getLLBuild, getPropertiesObject } from "./ll-utils";
 
@@ -21,8 +20,11 @@ api.use("/api/", router);
 router.get("/hello", (req, res) => res.send("Hello World!"));
 
 router.get("/gamelist/:id", (req, res) => {
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist access is not configured." });
+  }
   notion = new Client({
-    auth: "secret_bosJYRpBzDUNd9bfqiQ0yWJknYA66G5ebvUhqTiy9E2",
+    auth: process.env.NOTION_GAMELIST_TOKEN,
   });
   (async () => {
     const result = await getNotionData(
@@ -42,10 +44,13 @@ router.get("/gamelist/:id", (req, res) => {
 });
 
 router.get("/gamelist", (req, res) => {
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist access is not configured." });
+  }
   (async () => {
     try {
       notion = new Client({
-        auth: "secret_bosJYRpBzDUNd9bfqiQ0yWJknYA66G5ebvUhqTiy9E2",
+        auth: process.env.NOTION_GAMELIST_TOKEN,
       });
       run = 1;
       await startNotionLooper(res, undefined, run);
@@ -58,23 +63,56 @@ router.get("/gamelist", (req, res) => {
   })();
 });
 
-// router.get("/artwork", (req, res) => {
-//   const headers = {
-//     "Client-ID": "m83mbo6r56trenidw05tz7rl0qake9",
-//     Authorization: "Bearer mgqzu153x5jc9j006dnu8iv36532td",
-//     "Content-Type": "application/json",
-//     Accept: "application/json",
-//   };
+router.post("/gamelist", express.json(), async (req, res) => {
+  if (!process.env.GAMELIST_WRITE_KEY || req.get("x-api-key") !== process.env.GAMELIST_WRITE_KEY) {
+    return res.status(401).json({ error: "Unauthorized." });
+  }
 
-//   axios
-//     .post("https://api.igdb.com/v4/games", { fields: "*" }, { headers })
-//     .then((response) => {
-//       res.json(response);
-//     })
-//     .catch((err) => {
-//       res.json(err);
-//     });
-// });
+  const { name, coverUrl, platform, status } = req.body || {};
+  const required = { name, coverUrl, platform, status };
+  const missing = Object.entries(required)
+    .filter(([, value]) => typeof value !== "string" || !value.trim())
+    .map(([field]) => field);
+
+  if (missing.length) {
+    return res.status(400).json({ error: "Missing or invalid required fields.", fields: missing });
+  }
+
+  let cover;
+  try {
+    cover = new URL(coverUrl);
+  } catch {
+    return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
+  }
+  if (!["http:", "https:"].includes(cover.protocol)) {
+    return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
+  }
+  if (!statusOrder.includes(status)) {
+    return res.status(400).json({ error: `status must be one of: ${statusOrder.join(", ")}.` });
+  }
+
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist write access is not configured." });
+  }
+
+  try {
+    const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const page = await client.pages.create({
+      parent: { database_id: "1f41efa65d6e47eebe88b6313a2f9889" },
+      properties: {
+        title: { title: [{ text: { content: name.trim() } }] },
+        cover: { files: [{ name: cover.href, type: "external", external: { url: cover.href } }] },
+        platform: { multi_select: [{ name: platform.trim() }] },
+        status: { select: { name: status } },
+      },
+    });
+    cache = { date: null, data: null };
+    res.status(201).json(getGameObject(page));
+  } catch (error) {
+    console.error("Failed to add game", error);
+    res.status(500).json({ error: "Unable to add game." });
+  }
+});
 
 async function startNotionLooper(res, next_cursor = undefined, run = 1) {
   let result = await getNotionData(next_cursor);
@@ -198,10 +236,17 @@ function getGameObject(gamedata) {
  * LL STUFF
  */
 
+router.use("/ll", (req, res, next) => {
+  if (!process.env.NOTION_LL_TOKEN) {
+    return res.status(503).json({ error: "LL access is not configured." });
+  }
+  next();
+});
+
 //get data based on userid
 router.get("/ll/:userid", (req, res) => {
   notion = new Client({
-    auth: "secret_3Chdy721CTWbWAqsfwox0pCiVedTyLVXIIl58D7joY3",
+    auth: process.env.NOTION_LL_TOKEN,
   });
   (async () => {
     const data = await getNotionLLData();
@@ -222,7 +267,7 @@ router.get("/ll/:userid", (req, res) => {
 //add / update
 router.post("/ll/add/", (req, res) => {
   notion = new Client({
-    auth: "secret_3Chdy721CTWbWAqsfwox0pCiVedTyLVXIIl58D7joY3",
+    auth: process.env.NOTION_LL_TOKEN,
   });
 
   const requestBody = JSON.parse(req.body);
@@ -273,7 +318,7 @@ router.post("/ll/add/", (req, res) => {
 // delete
 router.get("/ll/delete/:userid/:name", (req, res) => {
   notion = new Client({
-    auth: "secret_3Chdy721CTWbWAqsfwox0pCiVedTyLVXIIl58D7joY3",
+    auth: process.env.NOTION_LL_TOKEN,
   });
 
   (async () => {
