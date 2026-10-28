@@ -90,7 +90,7 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       if (typeof value !== "boolean") {
         return res.status(400).json({ error: "completed must be a boolean." });
       }
-      properties["100%"] = { checkbox: value };
+      properties.completed = { checkbox: value };
       continue;
     }
     if (typeof value !== "string" || (field !== "rating" && !value.trim())) {
@@ -112,10 +112,12 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
     } else if (field === "platform") {
       properties.platform = { multi_select: [{ name: value.trim() }] };
     } else if (field === "status") {
-      if (!statusOrder.includes(value)) {
-        return res.status(400).json({ error: `status must be one of: ${statusOrder.join(", ")}.` });
+      const statuses = Array.isArray(value) ? value : [value];
+      if (!statuses.length || statuses.some((status) => typeof status !== "string" || !statusOrder.includes(status)) ||
+        new Set(statuses).size !== statuses.length) {
+        return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
       }
-      statusChange = value;
+      statusChange = statuses;
     } else if (field === "rating") {
       properties.rating = { select: value.trim() ? { name: value.trim() } : null };
     }
@@ -132,7 +134,11 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
       return res.status(404).json({ error: "Game not found." });
     }
     if (statusChange) {
-      properties.status = makeStatusProperty(existing.properties?.status?.type, statusChange);
+      const statusType = existing.properties?.status?.type;
+      if (statusChange.length > 1 && statusType !== "multi_select") {
+        return res.status(400).json({ error: "The Notion status property must be multi-select to save multiple statuses." });
+      }
+      properties.status = makeStatusProperty(statusType, statusChange);
     }
     const page = await client.pages.update({ page_id: req.params.id, properties });
     cache = { date: null, data: null };
@@ -200,11 +206,12 @@ router.post("/gamelist", express.json(), async (req, res) => {
   }
 
   const { name, coverUrl, platform, status } = req.body || {};
+  const statuses = Array.isArray(status) ? status : [status];
   const completed = req.body?.completed ?? false;
   if (typeof completed !== "boolean") {
     return res.status(400).json({ error: "completed must be a boolean." });
   }
-  const required = { name, coverUrl, platform, status };
+  const required = { name, coverUrl, platform };
   const missing = Object.entries(required)
     .filter(([, value]) => typeof value !== "string" || !value.trim())
     .map(([field]) => field);
@@ -222,8 +229,9 @@ router.post("/gamelist", express.json(), async (req, res) => {
   if (!["http:", "https:"].includes(cover.protocol)) {
     return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
   }
-  if (!statusOrder.includes(status)) {
-    return res.status(400).json({ error: `status must be one of: ${statusOrder.join(", ")}.` });
+  if (!statuses.length || statuses.some((value) => typeof value !== "string" || !statusOrder.includes(value)) ||
+    new Set(statuses).size !== statuses.length) {
+    return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
   }
 
   if (!process.env.NOTION_GAMELIST_TOKEN) {
@@ -235,14 +243,18 @@ router.post("/gamelist", express.json(), async (req, res) => {
     const database = await client.databases.retrieve({
       database_id: "1f41efa65d6e47eebe88b6313a2f9889",
     });
+    const statusType = database.properties?.status?.type;
+    if (statuses.length > 1 && statusType !== "multi_select") {
+      return res.status(400).json({ error: "The Notion status property must be multi-select to save multiple statuses." });
+    }
     const page = await client.pages.create({
       parent: { database_id: "1f41efa65d6e47eebe88b6313a2f9889" },
       properties: {
         title: { title: [{ text: { content: name.trim() } }] },
         cover: { files: [{ name: "cover", type: "external", external: { url: cover.href } }] },
         platform: { multi_select: [{ name: platform.trim() }] },
-        status: makeStatusProperty(database.properties?.status?.type, status),
-        "100%": { checkbox: completed },
+        status: makeStatusProperty(statusType, statuses),
+        completed: { checkbox: completed },
       },
     });
     cache = { date: null, data: null };
@@ -256,9 +268,10 @@ router.post("/gamelist", express.json(), async (req, res) => {
   }
 });
 
-function makeStatusProperty(type, name) {
+function makeStatusProperty(type, statuses) {
+  if (type === "multi_select") return { multi_select: statuses.map((name) => ({ name })) };
+  const [name] = statuses;
   if (type === "status") return { status: { name } };
-  if (type === "multi_select") return { multi_select: [{ name }] };
   if (type === "select") return { select: { name } };
   throw new Error(`Unsupported Notion status property type: ${type || "missing"}.`);
 }
@@ -379,8 +392,7 @@ function getGameObject(gamedata) {
       gamedata.properties?.cover?.files?.[0]?.name || "",
     name: gamedata.properties?.title?.title?.[0]?.plain_text || "",
     platform: gamedata.properties?.platform?.multi_select?.[0]?.name || "",
-    completed: gamedata.properties?.["100%"]?.checkbox ??
-      gamedata.properties?.completed?.checkbox ?? false,
+    completed: gamedata.properties?.completed?.checkbox ?? false,
   };
 }
 
