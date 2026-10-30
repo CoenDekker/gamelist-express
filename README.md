@@ -69,8 +69,10 @@ Send a JSON request to `POST /api/gamelist` with `GAMELIST_WRITE_KEY` in the
 Required fields: `name`, `coverUrl` (an HTTP or HTTPS URL), `platform`, and
 `status`, a non-empty array of unique values from `playing`, `queued`,
 `replaying`, `finished`, `unplayed`, `pause`, and `backlog`. The optional
-`completed` field is a boolean. The Notion `status` property must be Multi-select
-to store multiple values.
+`completed` field is a boolean. Optional `developer` is text (up to 200 characters)
+and `release` is a four-digit year (an existing trailing `*` is accepted). These
+map to the Notion `developer` and `release` rich-text properties. The Notion
+`status` property must be Multi-select to store multiple values.
 
 ```sh
 curl -X POST http://localhost:8888/api/gamelist \
@@ -87,13 +89,15 @@ return `400`; missing or incorrect API keys return `401`.
 `GET /api/gamelist/search?name=Rayman` returns matching games by title, including
 each game's `id`, `name`, `image`, `platform`, `status`, and `rating`. Use the
 `name` for a dropdown label and the `id` as its value, so games with identical
-names can still be selected separately. URL-encode the search term.
+names can still be selected separately. Responses also include `developer` and
+`release` as text. URL-encode the search term.
 
 Fetch a selected game with `GET /api/gamelist/game/:id`. The response uses
 `image` for the cover URL. To edit it, send `PATCH /api/gamelist/game/:id` with
 `x-api-key` and any combination of `name`, `coverUrl`, `platform`, `status` (a
 non-empty array of unique status values), `rating` (a select value; send an
-empty string to clear it), and `completed` (a boolean). Unspecified fields stay
+empty string to clear it), `completed` (a boolean), `developer`, and `release`.
+Send an empty string to clear either rich-text field; unspecified fields stay
 unchanged. For example:
 
 ```sh

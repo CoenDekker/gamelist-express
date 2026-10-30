@@ -77,7 +77,7 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
   }
 
   const changes = req.body;
-  const fields = ["name", "coverUrl", "platform", "status", "rating", "completed"];
+  const fields = ["name", "coverUrl", "platform", "status", "rating", "completed", "developer", "release"];
   if (!changes || typeof changes !== "object" || Array.isArray(changes) ||
     !Object.keys(changes).length || Object.keys(changes).some((field) => !fields.includes(field))) {
     return res.status(400).json({ error: `Provide one or more of: ${fields.join(", ")}.` });
@@ -100,6 +100,14 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
         return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
       }
       statusChange = statuses;
+      continue;
+    }
+    if (field === "developer" || field === "release") {
+      if (typeof value !== "string" || (field === "developer" && value.length > 200) ||
+        (field === "release" && value.trim() && !/^\d{4}\*?$/.test(value.trim()))) {
+        return res.status(400).json({ error: `Invalid ${field}.` });
+      }
+      properties[field] = { rich_text: value.trim() ? [{ text: { content: value.trim() } }] : [] };
       continue;
     }
     if (typeof value !== "string" || (field !== "rating" && !value.trim())) {
@@ -237,11 +245,17 @@ router.post("/gamelist", express.json(), async (req, res) => {
     return res.status(401).json({ error: "Unauthorized." });
   }
 
-  const { name, coverUrl, platform, status } = req.body || {};
+  const { name, coverUrl, platform, status, developer, release } = req.body || {};
   const statuses = Array.isArray(status) ? status : [status];
   const completed = req.body?.completed ?? false;
   if (typeof completed !== "boolean") {
     return res.status(400).json({ error: "completed must be a boolean." });
+  }
+  if (developer !== undefined && (typeof developer !== "string" || developer.length > 200)) {
+    return res.status(400).json({ error: "Invalid developer." });
+  }
+  if (release !== undefined && (typeof release !== "string" || (release.trim() && !/^\d{4}\*?$/.test(release.trim())))) {
+    return res.status(400).json({ error: "Invalid release year." });
   }
   const required = { name, coverUrl, platform };
   const missing = Object.entries(required)
@@ -287,6 +301,8 @@ router.post("/gamelist", express.json(), async (req, res) => {
         platform: { multi_select: [{ name: platform.trim() }] },
         status: makeStatusProperty(statusType, statuses),
         completed: { checkbox: completed },
+        ...(developer?.trim() ? { developer: { rich_text: [{ text: { content: developer.trim() } }] } } : {}),
+        ...(release?.trim() ? { release: { rich_text: [{ text: { content: release.trim() } }] } } : {}),
       },
     });
     cache = { date: null, data: null };
@@ -424,6 +440,8 @@ function getGameObject(gamedata) {
       gamedata.properties?.cover?.files?.[0]?.name || "",
     name: gamedata.properties?.title?.title?.[0]?.plain_text || "",
     platform: gamedata.properties?.platform?.multi_select?.[0]?.name || "",
+    developer: gamedata.properties?.developer?.rich_text?.map((text) => text.plain_text).join("") || "",
+    release: gamedata.properties?.release?.rich_text?.map((text) => text.plain_text).join("") || "",
     completed: gamedata.properties?.completed?.checkbox ?? false,
   };
 }
