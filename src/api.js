@@ -71,6 +71,26 @@ router.get("/gamelist/game/:id", async (req, res) => {
   }
 });
 
+router.get("/gamelist/options", async (req, res) => {
+  if (!process.env.NOTION_GAMELIST_TOKEN) {
+    return res.status(503).json({ error: "Gamelist access is not configured." });
+  }
+
+  try {
+    const client = new Client({ auth: process.env.NOTION_GAMELIST_TOKEN });
+    const database = await client.databases.retrieve({
+      database_id: "1f41efa65d6e47eebe88b6313a2f9889",
+    });
+    res.set("Cache-Control", "public, max-age=300").json({
+      platforms: getPropertyOptionNames(database.properties?.platform),
+      statuses: getPropertyOptionNames(database.properties?.status),
+    });
+  } catch (error) {
+    console.error("Failed to load Gamelist options", error);
+    res.status(500).json({ error: "Unable to load Gamelist options." });
+  }
+});
+
 router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
   if (!process.env.GAMELIST_WRITE_KEY || req.get("x-api-key") !== process.env.GAMELIST_WRITE_KEY) {
     return res.status(401).json({ error: "Unauthorized." });
@@ -95,9 +115,9 @@ router.patch("/gamelist/game/:id", express.json(), async (req, res) => {
     }
     if (field === "status") {
       const statuses = Array.isArray(value) ? value : [value];
-      if (!statuses.length || statuses.some((status) => typeof status !== "string" || !statusOrder.includes(status)) ||
+      if (!statuses.length || statuses.some((status) => typeof status !== "string" || !status.trim()) ||
         new Set(statuses).size !== statuses.length) {
-        return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
+        return res.status(400).json({ error: "status must contain one or more unique non-empty values." });
       }
       statusChange = statuses;
       continue;
@@ -275,9 +295,9 @@ router.post("/gamelist", express.json(), async (req, res) => {
   if (!["http:", "https:"].includes(cover.protocol)) {
     return res.status(400).json({ error: "coverUrl must be an HTTP(S) URL." });
   }
-  if (!statuses.length || statuses.some((value) => typeof value !== "string" || !statusOrder.includes(value)) ||
+  if (!statuses.length || statuses.some((value) => typeof value !== "string" || !value.trim()) ||
     new Set(statuses).size !== statuses.length) {
-    return res.status(400).json({ error: `status must contain one or more unique values from: ${statusOrder.join(", ")}.` });
+    return res.status(400).json({ error: "status must contain one or more unique non-empty values." });
   }
 
   if (!process.env.NOTION_GAMELIST_TOKEN) {
@@ -322,6 +342,11 @@ function makeStatusProperty(type, statuses) {
   if (type === "status") return { status: { name } };
   if (type === "select") return { select: { name } };
   throw new Error(`Unsupported Notion status property type: ${type || "missing"}.`);
+}
+
+function getPropertyOptionNames(property) {
+  const options = property?.[property.type]?.options;
+  return Array.isArray(options) ? options.map((option) => option.name).filter(Boolean) : [];
 }
 
 async function startNotionLooper(res, next_cursor = undefined, run = 1) {
@@ -394,8 +419,9 @@ function removeDuplicatesAndSort(arr, prop) {
     return false;
   });
 
+  const orderedStatuses = [...new Set([...statusOrder, ...arr.flatMap((game) => game.status)])];
   const groupedByStatus = arr.reduce((acc, obj) => {
-    const status = statusOrder.find((value) => obj.status.includes(value));
+    const status = orderedStatuses.find((value) => obj.status.includes(value));
     if (!status) return acc;
     if (!acc[status]) {
       acc[status] = [];
@@ -419,7 +445,7 @@ function removeDuplicatesAndSort(arr, prop) {
 
   const result = [];
 
-  for (const status of statusOrder) {
+  for (const status of orderedStatuses) {
     if (groupedByStatus[status]) {
       result.push(...groupedByStatus[status]);
     }
